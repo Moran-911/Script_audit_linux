@@ -2,22 +2,22 @@
 Этот скрипт написан на bash, проверяет основные конфигурационные файлы, права на эти файлы у пользователей, ищет необновленные пакеты безопасности. Давайте пройдемся по самой написанной программе
 #Строгий режим отладки
 Включаем строгий режим отладки - программа прервется, если при ее выполнение произойдет ошибка
-
+```
 set -euo pipefail
-
+```
 # ПРОВЕРКА НА ROOT
 
 Функция которая проверяет, кто именно исполняет этот файл. Если этот пользователь имеет права root, то все хорошо, скрипт дальше продолжает работу.
-
+```
 if [[ $EUID -ne 0 ]]; then
     echo -e "FAILED: Только root может запустить этот скрипт"
     exit 1
 fi
-
+```
 # Проверка на наличие сторонних пользователей с UID=0
 
 Чтобы проверить каких-либо пользователей на UID=0, нам необходимо обратиться к конфигурационному файлу в котором у нас хранятся все учетки в системе (/etc/passwd). Далее через awk присваиваем переменной 1 аргумент в строке конфигурационного файла (название пользователя), у которых 3 и 4 аргумент равны 0.
-
+```
 audit_user(){
     echo "=== Проверка пользователей с UID 0 ==="
     local user_zero
@@ -29,11 +29,11 @@ audit_user(){
         echo 'Лишних root-пользователей не обнаружено.'
     fi
 }
-
+```
 # Проверка на пустые пароли пользователей
 
 В файле /etc/shadow находим через awk и регулярное выражение учетки с пустыми паролями. В конфиге пустые пароли обозначаются через *.
-
+```
 ереaudit_user_password_null(){
     echo "=== Проверка на пустые и заблокированные пароли ==="
     # Ищем тех, у кого пароль отключен (*)
@@ -47,11 +47,11 @@ audit_user(){
     echo "Заблокированные учетки (!):"
     echo "${user_blockpassword:-Никого не найдено}"
 }
-
+```
 # Проверка прав на критические конфигурационные файлы 
 
 Составляем список critical_file и записываем в него самые критичные конфигурационные файлы. Далее через for проверяем каждые файл на избыточные права при помощи stat. И задаем условие, при котором, если права не равны 600, 640, 440, 755 тогда функция perm_status_file определяет как опасность для безопасности.
-
+```
 perm_status_file(){
     echo "=== Проверка прав на критические файлы ==="
     local critical_file=("/etc/passwd" "/etc/shadow" "/etc/group" "/etc/security/pwquality.conf" "/etc/pam.d/" "/etc/sudoers" "/etc/sudoers.d/" "/etc/ssh/sshd_config" "/etc/ssh/sshd_config.d/" "~/.ssh/authorized_keys" "/etc/crontab" "/var/spool/cron/crontabs/" "/etc/anacrontab" "/etc/exports" "/etc/fstab" "/etc/hosts" "/etc/resolv.conf" "/etc/rc.local" "/etc/sysctl.conf" "/etc/sysctl.d/" "/etc/environment" "/etc/profile")
@@ -65,7 +65,7 @@ perm_status_file(){
         fi
     done
 }
-
+```
 # Проверка доступных способов подключения по ssh пользователя root
 В файле /etc/ssh/sshd_config находим параметры PubkeyAuthentication, PasswordAuthentication, PermitRootLogin. И в зависимости от того, какие значения присвоены этим параметрам выводит, что root может делать через ssh. Привожу пояснение:
 1. PubkeyAuthentication no - запрещает всем пользователя подключаться по публичному ключу;
@@ -76,7 +76,7 @@ perm_status_file(){
 6. PermitRootLogin no -  запрещает подключаться по ssh пользователю root;
 7. PermitRootLogin prohibit-password - разрешает подключаться пользователю root по ssh через публичный ключ. 
 
-
+```
 ssh_audit_onlyroot(){
     echo "=== Проверка конфигурации SSH root ==="
     if grep -qE "^[[:space:]]*PubkeyAuthentication[[:space:]]+no" /etc/ssh/sshd_config && \
@@ -98,7 +98,7 @@ ssh_audit_onlyroot(){
     fi
 }
 
-
+```
 # Проверка доступных способов подключения по ssh пользователя root
 1. PubkeyAuthentication no - запрещает всем пользователя подключаться по публичному ключу;
 2. PubkeyAuthentication no - разрешает всем пользователя подключаться по публичному ключу;
@@ -106,7 +106,7 @@ ssh_audit_onlyroot(){
 4. PasswordAuthentication yes - разрешает пользователям подключаться по ssh через пароль;
 
 
-
+```
 ssh_audit_user(){
     echo "=== Проверка конфигурации SSH user ==="
     if grep -qE "^[[:space:]]*PubkeyAuthentication[[:space:]]+no" /etc/ssh/sshd_config && grep -qE "^[[:space:]]*PasswordAuthentication[[:space:]]+no" /etc/ssh/sshd_config; then
@@ -121,9 +121,9 @@ ssh_audit_user(){
         echo "Подключение по ssh работает только по паролю"
     fi
 }
-
+```
 # Проверка возможности подключения по ssh через tgt билет
-
+```
 ssh_audit_kerberos(){
     echo "=== Проверка конфигурации SSH Kerberos ==="
     if grep -qE "^[[:space:]]*KerberosAuthentication[[:space:]]+no" /etc/ssh/sshd_config; then
@@ -136,11 +136,11 @@ ssh_audit_kerberos(){
         fi
     fi
 }
-
+```
 # Проверка возможности подключения по ssh через GSSAPI
 Скажем так, это безопасный способ аутентификации через kerberose. В обычном kerberos при подключении ты вводишь пароль и получаешь tgt билет, а в gssapi, когда ты только вошел в систему тебе присвоили tgt билет и при подключении по ssh пароль уже не требуется.
 
-
+```
 ssh_audit_gssapi(){
     echo "=== Проверка конфигурации SSH GSSAPI ==="
     if grep -qE "^[[:space:]]*GSSAPIAuthentication[[:space:]]+no" /etc/ssh/sshd_config; then
@@ -153,11 +153,11 @@ ssh_audit_gssapi(){
         echo "Опасно! Параметр GSSAPICleanupCredentials установлен в no."
     fi
 }
-
+```
 
 # Проверка сложности пароля
 
-
+```
 audit_password_policy() {
     echo "=== АУДИТ ПОЛИТИКИ СЛОЖНОСТИ ПАРОЛЕЙ ==="
     local config="/etc/security/pwquality.conf"
@@ -175,9 +175,9 @@ audit_password_policy() {
         echo "$active_rules"
     fi
 }
-
+```
 # Проверка открытых сетевых портов через netstat
-
+```
 network_audit(){
     echo '=== Проверка открытых сетевых портов ==='
     # netstat устарел, используем ss. Если ss нет, выполнится netstat
@@ -188,10 +188,10 @@ network_audit(){
     fi
 }
 
-
+```
 # Вывод списка активных служб в автозагрузке через systemctl
 
-
+```
 audit_suid_sgid() {
     echo "=== АУДИТ БИНАРНИКОВ С ФЛАГАМИ SUID/SGID ==="
     # 1. Поиск SUID файлов (права -perm /4000 или -perm -4000)
@@ -226,11 +226,11 @@ audit_suid_sgid() {
         done
     fi
 }
-
+```
 
 # Проверка обновления пакетов безопасности
 
-
+```
 audit_security_packages() {
     echo "=== АУДИТ ОБНОВЛЕНИЙ БЕЗОПАСНОСТИ ==="
     if command -v apt-get &>/dev/null; then
@@ -258,6 +258,6 @@ audit_security_packages() {
         fi
     fi
 }
-
+```
 
 
