@@ -22,7 +22,6 @@ audit_user(){
     echo "=== Проверка пользователей с UID 0 ==="
     local user_zero
     user_zero=$(awk -F: '$3==0 && $4==0 {print $1}' /etc/passwd)
-    
     # Обязательно берем в кавычки "$user_zero", чтобы не упасть при пустом значении
     if [ "$user_zero" != "root" ]; then
         echo "Найдены сторонние пользователи с UID 0: ${user_zero}"
@@ -42,7 +41,6 @@ audit_user(){
     user_zpassword=$(awk -F: '$2 ~ /^[*]/ {print $1}' /etc/shadow)
     echo "Учетки с отключенными паролями (*):"
     echo "${user_zpassword:-Никого не найдено}"
-    
     # Ищем заблокированные учетки (!)
     local user_blockpassword
     user_blockpassword=$(awk -F: '$2 ~ /^[!]/ {print $1}' /etc/shadow)
@@ -57,12 +55,10 @@ audit_user(){
 perm_status_file(){
     echo "=== Проверка прав на критические файлы ==="
     local critical_file=("/etc/passwd" "/etc/shadow" "/etc/group" "/etc/security/pwquality.conf" "/etc/pam.d/" "/etc/sudoers" "/etc/sudoers.d/" "/etc/ssh/sshd_config" "/etc/ssh/sshd_config.d/" "~/.ssh/authorized_keys" "/etc/crontab" "/var/spool/cron/crontabs/" "/etc/anacrontab" "/etc/exports" "/etc/fstab" "/etc/hosts" "/etc/resolv.conf" "/etc/rc.local" "/etc/sysctl.conf" "/etc/sysctl.d/" "/etc/environment" "/etc/profile")
-
     for i in "${critical_file[@]}"; do
         if [ -e "$i" ]; then
             local status_permission
             status_permission=$(stat -c "%a" "$i")
-            
             if [ "$status_permission" -ne 640 ] && [ "$status_permission" -ne 600 ] && [ "$status_permission" -ne 440 ] && [ "$status_permission" -ne 755 ]; then
                 echo "[!] ОПАСНОСТЬ: Нетипичные права на ${i}: ${status_permission}"
             fi
@@ -101,6 +97,7 @@ ssh_audit_onlyroot(){
         echo "Для root полностью закрыта возможность подключения через ssh"
     fi
 }
+
 
 # Проверка доступных способов подключения по ssh пользователя root
 1. PubkeyAuthentication no - запрещает всем пользователя подключаться по публичному ключу;
@@ -157,22 +154,20 @@ ssh_audit_gssapi(){
     fi
 }
 
+
 # Проверка сложности пароля
 
 
 audit_password_policy() {
     echo "=== АУДИТ ПОЛИТИКИ СЛОЖНОСТИ ПАРОЛЕЙ ==="
     local config="/etc/security/pwquality.conf"
-
     if [ ! -f "$config" ]; then
         echo "[-] Файл конфигурации pwquality не найден."
         return 0
     fi
-
     local active_rules
     # Исправленная регулярка без лишних квадратных скобок
     active_rules=$(grep -E -v '^[[:space:]]*#|^[[:space:]]*$' "$config" || true)
-
     if [ -z "$active_rules" ]; then
         echo "[!] ВНИМАНИЕ: Все правила закомментированы! Действуют дефолтные мягкие настройки."
     else
@@ -199,14 +194,11 @@ network_audit(){
 
 audit_suid_sgid() {
     echo "=== АУДИТ БИНАРНИКОВ С ФЛАГАМИ SUID/SGID ==="
-    
     # 1. Поиск SUID файлов (права -perm /4000 или -perm -4000)
     echo "[*] Поиск файлов с установленным флагом SUID (запуск от имени владельца)..."
-    
     local suid_files
     # Ищем файлы (-type f) с маской прав 4000, ошибки "Permission denied" глушим через 2>/dev/null
     suid_files=$(find / -xdev -perm -4000 -type f 2>/dev/null || true)
-    
     if [ -z "$suid_files" ]; then
         echo "    [+] SUID файлов не обнаружено."
     else
@@ -218,15 +210,11 @@ audit_suid_sgid() {
             echo "        -> $file : $file_info"
         done
     fi
-
     echo ""
-
     # 2. Поиск SGID файлов (права -perm /2000 или -perm -2000)
     echo "[*] Поиск файлов с установленным флагом SGID (запуск от имени группы)..."
-    
     local sgid_files
     sgid_files=$(find / -xdev -perm -2000 -type f 2>/dev/null || true)
-    
     if [ -z "$sgid_files" ]; then
         echo "    [+] SGID файлов не обнаружено."
     else
@@ -239,33 +227,29 @@ audit_suid_sgid() {
     fi
 }
 
+
 # Проверка обновления пакетов безопасности
+
 
 audit_security_packages() {
     echo "=== АУДИТ ОБНОВЛЕНИЙ БЕЗОПАСНОСТИ ==="
-
     if command -v apt-get &>/dev/null; then
         echo "[*] Обновление кэша APT..."
         apt-get update -y &>/dev/null
-        
         local security_updates
         security_updates=$(apt-get -s upgrade 2>/dev/null | grep "^Inst" | grep -iE "security|ubuntu.*-updates" || true)
-
         if [ -z "$security_updates" ]; then
             echo -e "[ ${GREEN}OK${NC} ] Критических устаревших пакетов безопасности не обнаружено."
         else
             echo -e "[ ${RED}WARN${NC} ] ОБНАРУЖЕНЫ УЯЗВИМЫЕ ПАКЕТЫ! Срочно требуются патчи безопасности:"
             echo "$security_updates" | awk '{print "    -> " $2 " (доступна версия: " $3 ")"}'
         fi
-
     elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
         local pkg_mgr
         command -v dnf &>/dev/null && pkg_mgr="dnf" || pkg_mgr="yum"
         echo "[*] Проверка эксплойтов через $pkg_mgr..."
-        
         local dnf_updates
         dnf_updates=$($pkg_mgr check-update --security 2>/dev/null | grep -vE "Last metadata|Loaded plugins" | grep -v '^[[:space:]]*$' || true)
-        
         if [ -z "$dnf_updates" ]; then
             echo "[ OK ] Обновлений безопасности не найдено."
         else
